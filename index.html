@@ -351,8 +351,10 @@ const H={
  draft:t=>EXPORT?'':`<div class="draft">${t||'Rascunho provisório — substituir pelo modelo oficial validado com o jurídico'}</div>`,
 };
 function expDates(d,u){
-  if(!u||!d.admissao)return null;
-  const pr=String(d.expPrazo||'').match(/^(\d+)\+(\d+)$/);const [a,b]=pr?[+pr[1],+pr[2]]:u.exp;
+  const pr=String(d.expPrazo||'').match(/^(\d+)\+(\d+)$/);
+  if(!pr&&!u)return null;
+  const [a,b]=pr?[+pr[1],+pr[2]]:u.exp;
+  if(!d.admissao)return {a,b,fim1:'',ini2:'',fim2:''};
   const fim1=addDays(d.admissao,a-1), ini2=addDays(fim1,1), fim2=addDays(d.admissao,a+b-1);
   return {a,b,fim1,ini2,fim2};
 }
@@ -778,7 +780,7 @@ const KIT_DOCS=[['incFicha','Ficha de registro de empregado',docFicha],['incCont
 
 const TPL={
  kitAdm:{cat:'adm',nome:'Kit de registro (novo colaborador)',status:'oficial',desc:'Um PDF com todos os documentos de admissão, já com CNPJ, prazo de experiência e valor de VT da unidade.',
-   groups:[['Documentos do kit',KIT_DOCS.map(k=>k[0])],['Tipo de contrato',['tipoContrato','expPrazo'],d=>d.incContrato],['Colaborador',G_COL.concat(['salario','escala'])],['Documentos pessoais',['estadoCivil','endereco','cidade','cep']],['Ficha de registro',['nascimento','localNasc','pais','sexo','cor','instrucao','deficiencia','pai','mae','rg','telCel','funcao','cbo','salarioPor','horarioTrab','jornadaFicha','jornadaOutra','beneficiarios'],d=>d.incFicha],['Vale-transporte',['optaVT','vtRegiao','vtRota','vtCidadeOutra','vtValorManual','vtCircular','vtIda'],d=>d.incVT],['Dependentes',['depIR','depSF'],d=>d.incIR||d.incSF],['Uniformes',['itens'],d=>d.incUnif],['Guia do Colaborador',['guiaMarcar'],d=>d.incGuia],['Assinatura',['dataDoc']]],
+   groups:[['Documentos do kit',KIT_DOCS.map(k=>k[0])],['Tipo de contrato',['tipoContrato'],d=>d.incContrato],['Colaborador',G_COL.concat(['expPrazo','salario','escala'])],['Documentos pessoais',['estadoCivil','endereco','cidade','cep']],['Ficha de registro',['nascimento','localNasc','pais','sexo','cor','instrucao','deficiencia','pai','mae','rg','telCel','funcao','cbo','salarioPor','horarioTrab','jornadaFicha','jornadaOutra','beneficiarios'],d=>d.incFicha],['Vale-transporte',['optaVT','vtRegiao','vtRota','vtCidadeOutra','vtValorManual','vtCircular','vtIda'],d=>d.incVT],['Dependentes',['depIR','depSF'],d=>d.incIR||d.incSF],['Uniformes',['itens'],d=>d.incUnif],['Guia do Colaborador',['guiaMarcar'],d=>d.incGuia],['Assinatura',['dataDoc']]],
    defaults:()=>({...Object.fromEntries(KIT_DOCS.map(k=>[k[0],true])),cidade:'BRASILIA-DF',tipoContrato:'experiencia',optaVT:'sim',pais:'BRASIL',salarioPor:'Mês',deficiencia:'Não',jornadaFicha:'44h semanais · intervalo de 1 hora'}),
    calc:(d,u)=>(d.tipoContrato==='indeterminado'?[['Contrato','Prazo indeterminado (sem experiência)']]:calcExp(d,u)).concat(d.incVT?calcVT(d):[]).concat(u&&u.id==='wine'&&d.incPremio?[['__warn','Wine Garden não paga premiação (exceto gerente, chef e sommelier). Desmarque o termo de premiação se não for o caso.']]:[]),
    render:(d,u)=>KIT_DOCS.filter(k=>d[k[0]]).flatMap(k=>[].concat(k[2](d,u)))},
@@ -792,7 +794,7 @@ const TPL={
    groups:[['Colaborador',G_COL.concat(['salario','salarioForma'])],['Endereço',['endereco','cidade','cep']],['Assinatura',['dataDoc']]],
    defaults:()=>({cidade:'BRASILIA/DF',salarioForma:'Mensal'}),render:(d,u)=>[docContratoInd(d,u)]},
  contrato:{cat:'adm',nome:'Contrato de experiência',status:'oficial',desc:'Texto oficial. Prazo pela unidade: Asa Sul, Delivery e Noroeste 30+60; demais 45+45.',
-   groups:[['Colaborador',G_COL.concat(['salario'])],['Prazo de experiência',['expPrazo']],['Documentos pessoais',['endereco','cidade']],['Assinatura',['dataDoc']]],
+   groups:[['Colaborador',G_COL.concat(['expPrazo','salario'])],['Documentos pessoais',['endereco','cidade']],['Assinatura',['dataDoc']]],
    defaults:()=>({cidade:'BRASILIA-DF'}),calc:(d,u)=>calcExp(d,u),render:(d,u)=>[docContrato(d,u)]},
  premiacao:{cat:'adm',nome:'Termo de premiação',status:'oficial',desc:'Aditivo de prêmio por desempenho (art. 457, §§ 2º e 4º).',
    groups:[['Colaborador',['unidade','nome','cpf','cargo']],['Assinatura',['dataDoc']]],
@@ -883,7 +885,7 @@ const TPL={
    render:(d,u)=>[docUnifDevol(d,u)]},
 };
 function withDevol(d,u,html){return d.incDevol?[html,docUnifDevol(d,u)]:[html]}
-function calcExp(d,u){const e=expDates(d,u);if(!u)return[['__warn','Escolha a unidade para definir CNPJ e prazo de experiência.']];if(!e)return[['Prazo da unidade',`${u.exp[0]} + ${u.exp[1]} dias`]];return[['Prazo da experiência',`${e.a} + ${e.b} dias`],['Fim do 1º período',br(e.fim1)],['Prorrogação',`${br(e.ini2)} a ${br(e.fim2)}`]]}
+function calcExp(d,u){const e=expDates(d,u);const out=[];if(!u)out.push(['__warn','Escolha a unidade para definir o CNPJ.']);if(!e)return out;out.unshift(['Prazo da experiência',`${e.a} + ${e.b} dias${d.expPrazo?'':' (padrão da unidade)'}`]);if(e.fim1)out.push(['Fim do 1º período',br(e.fim1)],['Prorrogação',`${br(e.ini2)} a ${br(e.fim2)}`]);else out.push(['__warn','Informe a data de admissão para calcular as datas do contrato.']);return out}
 function calcAntec(d,u){const out=calcExp(d,u);const e=expDates(d,u);if(e&&d.dataRescisao){const prev=d.fase==='2'?e.fim2:e.fim1;const rest=Math.round((toD(prev)-toD(d.dataRescisao))/864e5);if(rest>0)out.push(['Dias restantes até o termo',rest],['Indenização art. 479',`${(rest/2).toLocaleString('pt-BR')} dias de remuneração`]);else out.push(['__warn','A data de rescisão está no fim ou depois do prazo; use "Término do contrato de experiência".'])}return out}
 
 /* ================= Medida disciplinar (modelo Wine Garden / Jhulia) ================= */
